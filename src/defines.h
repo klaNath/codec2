@@ -116,4 +116,23 @@ extern const struct lsp_codebook newamp2_energy_cb[];
 #define POW10F(x) expf(2.302585092994046f * (x))
 #endif
 
+/* On an MCU whose FPU is single precision only (e.g. Cortex-M33) every
+   expression that contains a double constant, and every call of a double
+   function, runs in (much slower) double precision.  With CODEC2_FAST_FLOAT the
+   hot spots of the decoder use single precision instead:
+
+   POWF(x, y): powf() for x >= 0 and a non-integer y.  Some C libraries (e.g. the
+               Raspberry Pi Pico SDK's) evaluate powf() with double precision
+               exp() and log(), so use the single precision functions.
+   FLT(c)    : floating point literal c as a float ("1.0" -> "1.0f").
+
+   Without CODEC2_FAST_FLOAT nothing changes (the PC build keeps its results). */
+#ifdef CODEC2_FAST_FLOAT
+#define POWF(x, y) expf((y) * logf(x))
+#define FLT(c) c##f
+#else
+#define POWF(x, y) powf((x), (y))
+#define FLT(c) c
+#endif
+
 #endif

@@ -387,7 +387,7 @@ void lpc_post_filter(codec2_fftr_cfg fftr_fwd_cfg, float Pw[], float ak[],
 
   e_after = 1E-4;
   for (i = 0; i < FFT_ENC / 2; i++) {
-    Pfw = powf(Rw[i], beta);
+    Pfw = POWF(Rw[i], beta);
     Pw[i] *= Pfw * Pfw;
     e_after += Pw[i];
   }
@@ -404,7 +404,7 @@ void lpc_post_filter(codec2_fftr_cfg fftr_fwd_cfg, float Pw[], float ak[],
     /* add 3dB to first 1 kHz to account for LP effect of PF */
 
     for (i = 0; i < FFT_ENC / 8; i++) {
-      Pw[i] *= 1.4 * 1.4;
+      Pw[i] *= FLT(1.4) * FLT(1.4);
     }
   }
 
@@ -464,7 +464,8 @@ void aks_to_M2(codec2_fftr_cfg fftr_fwd_cfg, float ak[], /* LPC's */
 
 #ifndef FDV_ARM_MATH
   for (i = 0; i < FFT_ENC / 2; i++) {
-    Pw[i] = 1.0 / (Aw[i].real * Aw[i].real + Aw[i].imag * Aw[i].imag + 1E-6);
+    Pw[i] = FLT(1.0) / (Aw[i].real * Aw[i].real + Aw[i].imag * Aw[i].imag +
+                        FLT(1E-6));
   }
 #else
   // this difference may seem strange, but the gcc for STM32F4 generates almost
@@ -506,8 +507,8 @@ void aks_to_M2(codec2_fftr_cfg fftr_fwd_cfg, float ak[], /* LPC's */
   noise = 1E-32;
 
   for (m = 1; m <= model->L; m++) {
-    am = (int)((m - 0.5) * model->Wo / r + 0.5);
-    bm = (int)((m + 0.5) * model->Wo / r + 0.5);
+    am = (int)((m - FLT(0.5)) * model->Wo / r + FLT(0.5));
+    bm = (int)((m + FLT(0.5)) * model->Wo / r + FLT(0.5));
 
     // FIXME: With arm_rfft_fast_f32 we have to use this
     // otherwise sometimes a to high bm is calculated
