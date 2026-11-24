@@ -61,6 +61,21 @@ static const arm_cfft_instance_f32* arm_fft_cache_get(const arm_cfft_instance_f3
 #endif
 #endif
 
+#ifdef CODEC2_FFT_TABLES_IN_RAM
+// The CMSIS-DSP twiddle and bit reversal tables are const data in flash.  On
+// MCUs that run code from flash through a small cache (e.g. RP2350's 16 KB XIP
+// cache) they compete with the code for cache lines, so give each real FFT
+// instance its own copy in RAM.
+static void cfft_tables_to_ram(arm_cfft_instance_f32* S) {
+  uint16_t* rev = MALLOC(S->bitRevLength * sizeof(uint16_t));
+  float32_t* tw = MALLOC(S->fftLen * 2 * sizeof(float32_t));
+  memcpy(rev, S->pBitRevTable, S->bitRevLength * sizeof(uint16_t));
+  memcpy(tw, S->pTwiddle, S->fftLen * 2 * sizeof(float32_t));
+  S->pBitRevTable = rev;
+  S->pTwiddle = tw;
+}
+#endif
+
 void codec2_fft_free(codec2_fft_cfg cfg) {
 #ifdef USE_KISS_FFT
   KISS_FFT_FREE(cfg);
@@ -108,6 +123,12 @@ codec2_fftr_cfg codec2_fftr_alloc(int nfft, int inverse_fft, void* mem,
   retval->inverse = inverse_fft;
   retval->instance = MALLOC(sizeof(arm_rfft_fast_instance_f32));
   arm_rfft_fast_init_f32(retval->instance, nfft);
+#ifdef CODEC2_FFT_TABLES_IN_RAM
+  cfft_tables_to_ram(&retval->instance->Sint);
+  float32_t* rtw = MALLOC(nfft * sizeof(float32_t));
+  memcpy(rtw, retval->instance->pTwiddleRFFT, nfft * sizeof(float32_t));
+  retval->instance->pTwiddleRFFT = rtw;
+#endif
   // memcpy(&retval->instance->Sint,arm_fft_cache_get(&retval->instance->Sint),sizeof(arm_cfft_instance_f32));
 #endif
   return retval;
@@ -116,6 +137,11 @@ void codec2_fftr_free(codec2_fftr_cfg cfg) {
 #ifdef USE_KISS_FFT
   KISS_FFT_FREE(cfg);
 #else
+#ifdef CODEC2_FFT_TABLES_IN_RAM
+  FREE((void*)cfg->instance->Sint.pBitRevTable);
+  FREE((void*)cfg->instance->Sint.pTwiddle);
+  FREE((void*)cfg->instance->pTwiddleRFFT);
+#endif
   FREE(cfg->instance);
   FREE(cfg);
 #endif

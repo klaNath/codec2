@@ -53,8 +53,15 @@ static inline void codec2_fftr(codec2_fftr_cfg cfg, codec2_fft_scalar* in,
 #ifdef USE_KISS_FFT
   kiss_fftr(cfg, in, (kiss_fft_cpx*)out);
 #else
+  // Note: arm_rfft_fast_f32() uses in[] as scratch space
+  const int half = cfg->instance->fftLenRFFT / 2;
   arm_rfft_fast_f32(cfg->instance, in, (float*)out, cfg->inverse);
-  out->imag = 0;  // remove out[FFT_ENC/2]->real stored in out[0].imag
+  // CMSIS packs the real valued bin at Fs/2 into out[0].imag.  kiss_fftr()
+  // returns it as out[N/2], which is where the rest of Codec2 expects it, so
+  // out[] must have room for N/2+1 bins
+  out[half].real = out[0].imag;
+  out[half].imag = 0;
+  out[0].imag = 0;
 #endif
 }
 
@@ -63,8 +70,12 @@ static inline void codec2_fftri(codec2_fftr_cfg cfg, codec2_fft_cpx* in,
 #ifdef USE_KISS_FFT
   kiss_fftri(cfg, (kiss_fft_cpx*)in, out);
 #else
+  const int n = cfg->instance->fftLenRFFT;
+  // pack the Fs/2 bin (in[N/2].real) into in[0].imag as CMSIS expects
+  in[0].imag = in[n / 2].real;
   arm_rfft_fast_f32(cfg->instance, (float*)in, out, cfg->inverse);
-  // arm_scale_f32(out,cfg->instance->fftLenRFFT,out,cfg->instance->fftLenRFFT);
+  // The CMSIS inverse includes a scale of 1/N, kiss_fftri() does not.  The
+  // caller compensates (see FFTI_FACTOR in synthesise()), so don't scale here.
 #endif
 }
 
