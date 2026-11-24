@@ -1704,7 +1704,7 @@ void analyse_one_frame(struct CODEC2 *c2, MODEL *model, short speech[]) {
   for (i = 0; i < m_pitch - n_samp; i++) c2->Sn[i] = c2->Sn[i + n_samp];
   for (i = 0; i < n_samp; i++) c2->Sn[i + m_pitch - n_samp] = speech[i];
 
-  dft_speech(&c2->c2const, c2->fft_fwd_cfg, Sw, c2->Sn, c2->w);
+  dft_speech(&c2->c2const, c2->fftr_fwd_cfg, Sw, c2->Sn, c2->w);
 
   /* Estimate pitch */
   nlp(c2->nlp, c2->Sn, n_samp, &pitch, Sw, c2->W, &c2->prev_f0_enc);

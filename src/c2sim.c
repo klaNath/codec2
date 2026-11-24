@@ -649,7 +649,7 @@ int main(int argc, char *argv[]) {
     nlp(nlp_states, Sn, N_SAMP, &pitch, Sw, W, &prev_f0);
     model.Wo = TWO_PI / pitch;
 
-    dft_speech(&c2const, fft_fwd_cfg, Sw, Sn, w);
+    dft_speech(&c2const, fftr_fwd_cfg, Sw, Sn, w);
     two_stage_pitch_refinement(&c2const, &model, Sw);
     estimate_amplitudes(&model, Sw, W, 1);
 

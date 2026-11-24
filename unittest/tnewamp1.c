@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
   float Sn[m_pitch];          /* float input speech samples            */
   COMP Sw[FFT_ENC];           /* DFT of Sn[]                           */
   codec2_fft_cfg fft_fwd_cfg; /* fwd FFT states                        */
+  codec2_fftr_cfg fftr_fwd_cfg; /* fwd real FFT states for dft_speech() */
   float w[m_pitch];           /* time domain hamming window            */
   float W[FFT_ENC];           /* DFT of w[]                            */
   MODEL model;
@@ -63,6 +64,7 @@ int main(int argc, char *argv[]) {
   nlp_states = nlp_create(&c2const);
   prev_f0 = 1.0 / P_MAX_S;
   fft_fwd_cfg = codec2_fft_alloc(FFT_ENC, 0, NULL, NULL);
+  fftr_fwd_cfg = codec2_fftr_alloc(FFT_ENC, 0, NULL, NULL);
   make_analysis_window(&c2const, fft_fwd_cfg, w, W);
 
   phase_fft_fwd_cfg = codec2_fft_alloc(NEWAMP1_PHASE_NFFT, 0, NULL, NULL);
@@ -138,7 +140,7 @@ int main(int argc, char *argv[]) {
     nlp(nlp_states, Sn, n_samp, &pitch, Sw, W, &prev_f0);
     model.Wo = TWO_PI / pitch;
 
-    dft_speech(&c2const, fft_fwd_cfg, Sw, Sn, w);
+    dft_speech(&c2const, fftr_fwd_cfg, Sw, Sn, w);
     two_stage_pitch_refinement(&c2const, &model, Sw);
     estimate_amplitudes(&model, Sw, W, 1);
     est_voicing_mbe(&c2const, &model, Sw, W);

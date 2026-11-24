@@ -225,41 +225,11 @@ float hpf(float x, float states[]) {
 
 \*---------------------------------------------------------------------------*/
 
-// TODO: we can either go for a faster FFT using fftr and some stack usage
-// or we can reduce stack usage to almost zero on STM32 by switching to
-// fft_inplace
-#if 1
-void dft_speech(C2CONST *c2const, codec2_fft_cfg fft_fwd_cfg, COMP Sw[],
+void dft_speech(C2CONST *c2const, codec2_fftr_cfg fftr_fwd_cfg, COMP Sw[],
                 float Sn[], float w[]) {
   int i;
   int m_pitch = c2const->m_pitch;
   int nw = c2const->nw;
-
-  for (i = 0; i < FFT_ENC; i++) {
-    Sw[i].real = 0.0;
-    Sw[i].imag = 0.0;
-  }
-
-  /* Centre analysis window on time axis, we need to arrange input
-     to FFT this way to make FFT phases correct */
-
-  /* move 2nd half to start of FFT input vector */
-
-  for (i = 0; i < nw / 2; i++)
-    Sw[i].real = Sn[i + m_pitch / 2] * w[i + m_pitch / 2];
-
-  /* move 1st half to end of FFT input vector */
-
-  for (i = 0; i < nw / 2; i++)
-    Sw[FFT_ENC - nw / 2 + i].real =
-        Sn[i + m_pitch / 2 - nw / 2] * w[i + m_pitch / 2 - nw / 2];
-
-  codec2_fft_inplace(fft_fwd_cfg, Sw);
-}
-#else
-void dft_speech(codec2_fftr_cfg fftr_fwd_cfg, COMP Sw[], float Sn[],
-                float w[]) {
-  int i;
   float sw[FFT_ENC];
 
   for (i = 0; i < FFT_ENC; i++) {
@@ -279,9 +249,20 @@ void dft_speech(codec2_fftr_cfg fftr_fwd_cfg, COMP Sw[], float Sn[],
     sw[FFT_ENC - nw / 2 + i] =
         Sn[i + m_pitch / 2 - nw / 2] * w[i + m_pitch / 2 - nw / 2];
 
+  /* The input is real, so a real FFT (half the work of a complex FFT of the
+     same length) gives bins 0..FFT_ENC/2 */
+
   codec2_fftr(fftr_fwd_cfg, sw, Sw);
+
+  /* The other half of the spectrum is the complex conjugate.  Fill it in so
+     Sw[] is the same as the output of a complex FFT: later stages read bins
+     above FFT_ENC/2 (e.g. estimate_amplitudes() for harmonics near Fs/2). */
+
+  for (i = 1; i < FFT_ENC / 2; i++) {
+    Sw[FFT_ENC - i].real = Sw[i].real;
+    Sw[FFT_ENC - i].imag = -Sw[i].imag;
+  }
 }
-#endif
 
 /*---------------------------------------------------------------------------*\
 

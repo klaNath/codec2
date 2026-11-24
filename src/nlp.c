@@ -91,7 +91,7 @@ typedef struct {
   float sq[PMAX_M];        /* squared speech samples       */
   float mem_x, mem_y;      /* memory for notch filter      */
   float mem_fir[NLP_NTAP]; /* decimation FIR filter memory */
-  codec2_fft_cfg fft_cfg;  /* kiss FFT config              */
+  codec2_fftr_cfg fft_cfg; /* kiss real FFT config         */
   float *Sn16k;            /* Fs=16kHz input speech vector */
   FILE *f;
 } NLP;
@@ -151,7 +151,7 @@ void *nlp_create(C2CONST *c2const) {
   nlp->mem_y = 0.0;
   for (i = 0; i < NLP_NTAP; i++) nlp->mem_fir[i] = 0.0;
 
-  nlp->fft_cfg = codec2_fft_alloc(PE_FFT_SIZE, 0, NULL, NULL);
+  nlp->fft_cfg = codec2_fftr_alloc(PE_FFT_SIZE, 0, NULL, NULL);
   assert(nlp->fft_cfg != NULL);
 
   return (void *)nlp;
@@ -170,7 +170,7 @@ void nlp_destroy(void *nlp_state) {
   assert(nlp_state != NULL);
   nlp = (NLP *)nlp_state;
 
-  codec2_fft_free(nlp->fft_cfg);
+  codec2_fftr_free(nlp->fft_cfg);
   if (nlp->Fs == 16000) {
     free(nlp->Sn16k);
   }
@@ -216,8 +216,16 @@ float nlp(
     float *prev_f0 /* previous pitch f0 in Hz, memory for pitch tracking */
 ) {
   NLP *nlp;
-  float notch;          /* current notch filter output          */
-  COMP Fw[PE_FFT_SIZE]; /* DFT of squared signal (input/output) */
+  float notch; /* current notch filter output          */
+  /* The input to the DFT is real, so a real FFT is used: it returns
+     bins 0..PE_FFT_SIZE/2 only (the rest is the complex conjugate).  All
+     later processing uses bins <= PE_FFT_SIZE*DEC/pmin + 1 = 129. */
+  float fw_in[PE_FFT_SIZE]; /* decimated, windowed squared signal */
+#ifdef DUMP
+  COMP Fw[PE_FFT_SIZE]; /* full spectrum for the dump_*() functions */
+#else
+  COMP Fw[PE_FFT_SIZE / 2 + 1]; /* DFT of squared signal, mag squared */
+#endif
   float gmax;
   int gmax_bin;
   int m, i, j;
@@ -296,28 +304,31 @@ float nlp(
 
   /* Decimate and DFT */
 
-  for (i = 0; i < PE_FFT_SIZE; i++) {
-    Fw[i].real = 0.0;
-    Fw[i].imag = 0.0;
-  }
+  for (i = 0; i < PE_FFT_SIZE; i++) fw_in[i] = 0.0;
   for (i = 0; i < m / DEC; i++) {
-    Fw[i].real = nlp->sq[i * DEC] * nlp->w[i];
+    fw_in[i] = nlp->sq[i * DEC] * nlp->w[i];
   }
   PROFILE_SAMPLE_AND_LOG(window, filter, "      window");
 #ifdef DUMP
+  for (i = 0; i < PE_FFT_SIZE; i++) {
+    Fw[i].real = fw_in[i];
+    Fw[i].imag = 0.0;
+  }
   dump_dec(Fw);
 #endif
 
-  // FIXME: check if this can be converted to a real fft
-  // since all imag inputs are 0
-  codec2_fft_inplace(nlp->fft_cfg, Fw);
+  /* all imag inputs are 0, so use a real FFT (half the work of a complex
+     FFT of the same length) */
+  codec2_fftr(nlp->fft_cfg, fw_in, Fw);
   PROFILE_SAMPLE_AND_LOG(fft, window, "      fft");
 
-  for (i = 0; i < PE_FFT_SIZE; i++)
+  for (i = 0; i <= PE_FFT_SIZE / 2; i++)
     Fw[i].real = Fw[i].real * Fw[i].real + Fw[i].imag * Fw[i].imag;
 
   PROFILE_SAMPLE_AND_LOG(magsq, fft, "      mag sq");
 #ifdef DUMP
+  /* mag squared of a real signal is symmetric: rebuild the upper half */
+  for (i = 1; i < PE_FFT_SIZE / 2; i++) Fw[PE_FFT_SIZE - i].real = Fw[i].real;
   dump_sq(m, nlp->sq);
   dump_Fw(Fw);
 #endif
